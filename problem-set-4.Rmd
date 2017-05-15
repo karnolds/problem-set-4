@@ -1,7 +1,7 @@
 ---
 title: "Problem Set 4"
-author: "Your Name Here"
-date: "3/9/2017"
+author: "Katie ArnoldS"
+date: "Who are we kidding here"
 output: html_document
 ---
 
@@ -28,7 +28,7 @@ You will analyze some data in the [`nihexporter`](https://github.com/jayhesselbe
 First you need to install the `nihexporter` package (and `devtools`, if you don't have it already).
 
 ```r
-# install.packages('devtools')
+install.packages('devtools')
 devtools::install_github("jayhesselberth/nihexporter")
 ```
 
@@ -49,11 +49,17 @@ project_io
 
 The `projects` and `project_io` tables have the `r intersect(names(projects), names(project_io))` column in common. Use this column to perform a `left_join` and identify the most expensive project for each institute. Project institutes are in the `projects` table, whereas total project costs are available in the `project_io` table. Note you will have to use the `arrange` and `slice` verbs from `dplyr`.
 
-```{r problem_1, eval=FALSE}
-... %>%
-  left_join(...) %>%
-  arrange(...) %>%
-  slice(...)
+```{r problem_1}
+projects%>%
+select(project.num,institute)%>%
+  left_join(project_io) %>%
+  select(institute, project.num, total.cost) ->projects_merged
+projects_merged
+group_by(projects_merged, institute) %>%
+  arrange(desc(total.cost)) %>%
+  slice(1:1) -> most_expensive 
+most_expensive %>%
+  arrange(desc(total.cost))
 ```
 
 ## Problem 2
@@ -61,15 +67,27 @@ The `projects` and `project_io` tables have the `r intersect(names(projects), na
 Create a plot that describes the change in output (number of publications) for the most expensive grant from the above list. Note that you cannot use `n.pubs` for this, as that is an aggregate count over time. You need a tbl of following structure, which you can then use to calculate the number of publications each year (hint: use `n()` in a `summarize` statement:
 
 ```{r p2_tbl}
-projects %>%
-  head() %>%
-  left_join(publinks) %>%
-  left_join(publications) %>%
-  select(project.num, fiscal.year, fy.cost, pmid) %>%
-  na.omit()
+most_expensive %>%
+ungroup() %>%
+  arrange(desc(total.cost)) %>%
+slice(1:1) -> top_grant
+
+projects %>% semi_join(top_grant, by = "project.num") %>%
+ left_join(publinks) %>%
+ left_join(publications) %>%
+  select(project.num, pub.year, fy.cost, pmid) %>%
+  na.omit() -> top_grant
+top_grant
+ 
 ```
 
 ```{r problem_2}
+top_grant %>%
+  group_by(pub.year) %>%
+  summarise(total.pubs = n ())-> pubs_per_year
+pubs_per_year %>%
+  ggplot(aes(pub.year, total.pubs)) + geom_point() + geom_line() +  theme_bw()
+
 ```
 
 ## Problem 3
@@ -77,16 +95,30 @@ projects %>%
 Use the `projects` and `clinical_studies` table to calculate how many clinical studies have been started by projects from each institute.
 
 ```{r problem_3}
+projects %>%
+  left_join(clinical_studies, by = "project.num") %>%
+   na.omit() %>%
+  group_by(institute) %>%
+  summarize(trials_per_institute = n()) %>%
+  arrange(desc(trials_per_institute)) -> trial_projects
+trial_projects
+     
 ```
+
+
 
 ## Problem 4
 
 Calculate correlations between `total.cost` and `n.pubs` for each institute. You will need to `join` the `projects` and `project_io` tables to link `institute` with `total.cost` and `n.pubs`. You will then need to use `group_by` and `do` from `dplyr` and `tidy` from `broom` to calculate correlations.
 
-```{r problem_2, eval=FALSE}
-tab %>%
-  group_by(...) %>%
-  do(tidy(cor(..., ...)))
+```{r problem_4}
+projects %>%
+  left_join(project_io) %>%
+  na.omit() %>%
+  select(institute, total.cost, n.pubs) %>%
+  group_by(institute) %>%
+ do(tidy(cor(.$total.cost, .$n.pubs))) %>% 
+  arrange(desc(x))
 ```
 
 ## Problem 5 (extra credit)
@@ -98,6 +130,16 @@ Correlate [`rcr`](https://icite.od.nih.gov/) values from the `publications` tabl
 - type of grant (e.g. R01, P01, R21, etc.). 
 
 ```{r extra_credit}
+projects %>%
+  left_join(publinks, by = "project.num") %>%
+  left_join(publications, by = "pmid") %>%
+  left_join(project_io) %>%
+  na.omit () %>%
+  group_by(institute) %>%
+  select(institute, total.cost, rcr) %>%
+  do(tidy(cor(.$total.cost, .$rcr))) -> rcr_data
+
+rcr_data
 ```
 
 ## Problem 6 (extra extra credit)
